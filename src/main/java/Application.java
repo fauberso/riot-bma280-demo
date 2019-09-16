@@ -19,7 +19,7 @@ public class Application {
 		Materializer mat = ActorMaterializer.create(system);
 
 		// Find BMA280 device
-		Flow<BMA280.Command, BMA280.Results, NotUsed> bma280 = I2C.device(BMA280.class).onBus(I2CBus.BUS_0).at(BMA280.ADDRESS)
+		Flow<BMA280.Command, BMA280.Results, NotUsed> bma280 = I2C.device(BMA280.class).onBus(1).at(BMA280.DEFAULT_ADDRESS)
 				.asFlow(system);
 
 		// Now, let's set up a timer: Send a GPIOState.TOGGLE object every 500 millis

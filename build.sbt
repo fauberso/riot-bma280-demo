@@ -9,7 +9,8 @@ scalaVersion := "2.12.7"
 resolvers += "Local Maven Repository" at Path.userHome.asFile.toURI.toURL + ".m2/repository"
 
 libraryDependencies ++= Seq(
-  "org.riot-framework" % "riot-core" % "0.1-SNAPSHOT"
+  "org.riot-framework" % "riot-core" % "0.1-SNAPSHOT",
+  "ch.qos.logback" % "logback-classic" % "1.2.3"
 )
 
 enablePlugins(JavaServerAppPackaging)
