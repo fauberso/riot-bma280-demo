@@ -13,4 +13,6 @@ libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3"
 )
 
-enablePlugins(JavaServerAppPackaging)
+lazy val root = (project in file(".")).enablePlugins(JavaServerAppPackaging).settings(
+  riotPrereqs := "oracle-java8-jdk wiringpi i2c-tools"
+)
