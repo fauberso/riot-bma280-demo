@@ -12,7 +12,7 @@ import riot.protocols.ProtocolDescriptor;
  * BMA280 protocol. Based on the BMA280 C++ library by Kris Winer (Tlera
  * Corporation).
  * 
- * @see https://github.com/kriswiner/BMA280/blob/master/BMA280_library/BMA280.cpp
+ * @see https://github.com/kriswiner/BMA280/blob/master/BMA280Constants.library/BMA280.cpp
  * @see http://www.mouser.com/ds/2/783/BST-BMA280-DS000-11_published-786496.pdf
  */
 public class BMA280 implements I2CProtocol<BMA280.Command, BMA280.Results> {
@@ -100,7 +100,7 @@ public class BMA280 implements I2CProtocol<BMA280.Command, BMA280.Results> {
 	public void init(I2CDevice dev) throws IOException {
 		dev.write(BMA280Constants.BGW_SOFTRESET, (byte) 0xB6);
 
-		sleep(100);
+		delay(100);
 
 		dev.write(BMA280Constants.PMU_RANGE, accelerometerScale);
 		dev.write(BMA280Constants.PMU_BW, bandwidth);
@@ -124,10 +124,65 @@ public class BMA280 implements I2CProtocol<BMA280.Command, BMA280.Results> {
 
 		switch (command) {
 		case SELFTEST:
+			byte[] rawData = new byte[2];
+			// set full-scale range to 4G
+			dev.write(BMA280Constants.PMU_RANGE, BMA280Constants.AccelerometerScale.AFS_4G.value);
+			// mg/LSB for 4 g full scale
+			float STres = 4000.0f / 8192.0f;
 
-			break;
+			log.info("Starting self-test");
+
+			// x-axis test
+			// positive x-axis
+			dev.write(BMA280Constants.PMU_SELF_TEST, (byte) (0x10 | 0x04 | 0x01));
+			delay(100);
+			dev.read(BMA280Constants.ACCD_X_LSB, rawData, 0, rawData.length);
+			int posX = (rawData[1] << 8) | rawData[0];
+			// negative x-axis
+			dev.write(BMA280Constants.PMU_SELF_TEST, (byte) (0x10 | 0x00 | 0x01));
+			delay(100);
+			dev.read(BMA280Constants.ACCD_X_LSB, rawData, 0, rawData.length);
+			int negX = (rawData[1] << 8) | rawData[0];
+
+			log.info("X-axis self test = {} mg, should be > 800 mg", (float) (posX - negX) * STres / 4.0f);
+
+			// y-axis test
+			// positive y-axis
+			dev.write(BMA280Constants.PMU_SELF_TEST, (byte) (0x10 | 0x04 | 0x02));
+			delay(100);
+			dev.read(BMA280Constants.ACCD_Y_LSB, rawData, 0, rawData.length);
+			int posY = (rawData[1] << 8) | rawData[0];
+			// negative y-axis
+			dev.write(BMA280Constants.PMU_SELF_TEST, (byte) (0x10 | 0x00 | 0x02));
+			delay(100);
+			dev.read(BMA280Constants.ACCD_Y_LSB, rawData, 0, rawData.length);
+			int negY = (rawData[1] << 8) | rawData[0];
+
+			log.info("Y-axis self test = {} mg, should be > 800 mg", (float) (posY - negY) * STres / 4.0f);
+
+			// z-axis test
+			// positive z-axis
+			dev.write(BMA280Constants.PMU_SELF_TEST, (byte) (0x10 | 0x04 | 0x03));
+			delay(100);
+			dev.read(BMA280Constants.ACCD_Z_LSB, rawData, 0, rawData.length);
+			int posZ = (rawData[1] << 8) | rawData[0];
+			// negative z-axis
+			dev.write(BMA280Constants.PMU_SELF_TEST, (byte) (0x10 | 0x00 | 0x03));
+			delay(100);
+			dev.read(BMA280Constants.ACCD_Z_LSB, rawData, 0, rawData.length);
+			int negZ = (rawData[1] << 8) | rawData[0];
+
+			log.info("Z-axis self test = {} mg, should be > 400 mg", (float) (posZ - negZ) * STres / 4.0f);
+
+			// disable self test
+			dev.write(BMA280Constants.PMU_SELF_TEST, (byte) 0x00);
+			dev.write(BMA280Constants.PMU_RANGE, accelerometerScale);
+			return new Results();
 		case CALIBRATE:
-			// set target data to 0g, 0g, and +1 g, cutoff at 1% of bandwidth
+			// Fast compensation, as described in datasheet, chapter 4.5.2
+			dev.write(BMA280Constants.PMU_RANGE, BMA280Constants.AccelerometerScale.AFS_2G.value);
+			
+			// Set target data to 0g, 0g, and +1 g, cutoff at 1% of bandwidth
 			dev.write(BMA280Constants.OFC_SETTING, (byte) (0x20 | 0x01));
 			// x-axis calibration
 			dev.write(BMA280Constants.OFC_CTRL, (byte) (0x20 | 0x01));
@@ -141,6 +196,20 @@ public class BMA280 implements I2CProtocol<BMA280.Command, BMA280.Results> {
 			dev.write(BMA280Constants.OFC_CTRL, (byte) (0x60 | 0x01));
 			while ((0x10 & dev.read(BMA280Constants.OFC_CTRL)) != 0) {
 			}
+
+			// buffer for offset data
+			byte[] offsetData = new byte[2];
+			dev.read(BMA280Constants.OFC_OFFSET_X, offsetData, 0, offsetData.length);
+			float offsetX = ((offsetData[1] << 8) | offsetData[0]) * 7.8125f / 256.0f;
+			dev.read(BMA280Constants.OFC_OFFSET_Y, offsetData, 0, offsetData.length);
+			float offsetY = ((offsetData[1] << 8) | offsetData[0]) * 7.8125f / 256.0f;
+			dev.read(BMA280Constants.OFC_OFFSET_Z, offsetData, 0, offsetData.length);
+			float offsetZ = ((offsetData[1] << 8) | offsetData[0]) * 7.8125f / 256.0f;
+			log.info("Calibration complete. Offsets: X={}mg, Y={}mg, Z={}mg", offsetX, offsetY, offsetZ);
+
+			// revert to original g-range
+			dev.write(BMA280Constants.PMU_RANGE, accelerometerScale);
+			// ...then read current value
 		default:
 			byte[] data = new byte[9];
 			dev.read(0, data, 0, data.length);
@@ -162,7 +231,7 @@ public class BMA280 implements I2CProtocol<BMA280.Command, BMA280.Results> {
 		// Nothing to do here.
 	}
 
-	private void sleep(long delay) {
+	private void delay(long delay) {
 		try {
 			Thread.sleep(delay);
 		} catch (InterruptedException e) {

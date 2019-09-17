@@ -1,4 +1,3 @@
-
 public interface BMA280Constants {
 	/*
 	 * Local addresses
