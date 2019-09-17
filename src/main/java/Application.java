@@ -1,8 +1,8 @@
 import java.time.Duration;
+import java.util.Arrays;
+import java.util.concurrent.CompletionStage;
 
-import com.pi4j.io.i2c.I2CBus;
-import com.pi4j.io.i2c.I2CFactory;
-
+import akka.Done;
 import akka.NotUsed;
 import akka.actor.ActorSystem;
 import akka.stream.ActorMaterializer;
@@ -10,6 +10,8 @@ import akka.stream.Materializer;
 import akka.stream.javadsl.Flow;
 import akka.stream.javadsl.Sink;
 import akka.stream.javadsl.Source;
+import riot.GPIO;
+import riot.GPIO.State;
 import riot.I2C;
 
 public class Application {
@@ -18,15 +20,27 @@ public class Application {
 		ActorSystem system = ActorSystem.create("riot-bma280-demo");
 		Materializer mat = ActorMaterializer.create(system);
 
-		// Find BMA280 device
-		Flow<BMA280.Command, BMA280.Results, NotUsed> bma280 = I2C.device(BMA280.class).onBus(1).at(BMA280.DEFAULT_ADDRESS)
-				.asFlow(system);
+		// This sink will logs the values returned straight to the console:
+		Sink<BMA280.Results, CompletionStage<Done>> logSink = Sink.foreach(results -> System.out.println(results));
 
-		// Now, let's set up a timer: Send a GPIOState.TOGGLE object every 500 millis
-		Source<BMA280.Command, ?> timerSource = Source.tick(Duration.ZERO, Duration.ofMillis(500), BMA280.Command.READ);
+		// Assuming SDO pin is connected to GPIO 7: Setting it to LOW causes
+		// BMA280.DEFAULT_ADDRESS to be used. Setting it to HIGH causes
+		// BMA280.ALTERNATE_ADDRESS to be used. This allows several chips to be used on
+		// one bus.
+		GPIO.out(7).fixedAt(system, State.LOW);
+
+		// Find BMA280 device
+		Flow<BMA280.Command, BMA280.Results, NotUsed> bma280 = I2C.device(BMA280.class).onBus(1)
+				.at(BMA280Constants.DEFAULT_ADDRESS).asFlow(system);
+
+		// Send a CALIBRATE command to it
+		Source.from(Arrays.asList(BMA280.Command.CALIBRATE)).via(bma280).to(logSink).run(mat);
+
+		// Now, let's set up a timer: Send a READ command every 500 millis
+		Source<BMA280.Command, ?> timerSource = Source.tick(Duration.ZERO, Duration.ofSeconds(1), BMA280.Command.READ);
 
 		// Regularly query, then print out the values measured by the BMA280
-		timerSource.via(bma280).log("BMA280").to(Sink.ignore()).run(mat);
+		timerSource.via(bma280).to(logSink).run(mat);
 
 		// Wait forever
 		Thread.currentThread().join();

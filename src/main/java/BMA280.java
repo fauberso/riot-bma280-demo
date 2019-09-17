@@ -9,144 +9,20 @@ import riot.protocols.I2CProtocol;
 import riot.protocols.ProtocolDescriptor;
 
 /**
- * BMA280 protocol
+ * BMA280 protocol. Based on the BMA280 C++ library by Kris Winer (Tlera
+ * Corporation).
  * 
+ * @see https://github.com/kriswiner/BMA280/blob/master/BMA280_library/BMA280.cpp
  * @see http://www.mouser.com/ds/2/783/BST-BMA280-DS000-11_published-786496.pdf
  */
 public class BMA280 implements I2CProtocol<BMA280.Command, BMA280.Results> {
 	Logger log = LoggerFactory.getLogger(BMA280.class);
 
-	/*
-	 * Local addresses
-	 */
-	private static final int BGW_CHIPID = 0x00;
-	private static final int ACCD_X_LSB = 0x02;
-	private static final int ACCD_X_MSB = 0x03;
-	private static final int ACCD_Y_LSB = 0x04;
-	private static final int ACCD_Y_MSB = 0x05;
-	private static final int ACCD_Z_LSB = 0x06;
-	private static final int ACCD_Z_MSB = 0x07;
-	private static final int ACCD_TEMP = 0x08;
-	private static final int INT_STATUS_0 = 0x09;
-	private static final int INT_STATUS_1 = 0x0A;
-	private static final int INT_STATUS_2 = 0x0B;
-	private static final int INT_STATUS_3 = 0x0C;
-	private static final int FIFO_STATUS = 0x0E;
-	private static final int PMU_RANGE = 0x0F;
-	private static final int PMU_BW = 0x10;
-	private static final int PMU_LPW = 0x11;
-	private static final int PMU_LOW_NOISE = 0x12;
-	private static final int ACCD_HBW = 0x13;
-	private static final int BGW_SOFTRESET = 0x14;
-	private static final int INT_EN_0 = 0x16;
-	private static final int INT_EN_1 = 0x17;
-	private static final int INT_EN_2 = 0x18;
-	private static final int INT_MAP_0 = 0x19;
-	private static final int INT_MAP_1 = 0x1A;
-	private static final int INT_MAP_2 = 0x1B;
-	private static final int INT_SRC = 0x1E;
-	private static final int INT_OUT_CTRL = 0x20;
-	private static final int INT_RST_LATCH = 0x21;
-	private static final int INT_0 = 0x22;
-	private static final int INT_1 = 0x23;
-	private static final int INT_2 = 0x24;
-	private static final int INT_3 = 0x25;
-	private static final int INT_4 = 0x26;
-	private static final int INT_5 = 0x27;
-	private static final int INT_6 = 0x28;
-	private static final int INT_7 = 0x29;
-	private static final int INT_8 = 0x2A;
-	private static final int INT_9 = 0x2B;
-	private static final int INT_A = 0x2C;
-	private static final int INT_B = 0x2D;
-	private static final int INT_C = 0x2E;
-	private static final int INT_D = 0x2F;
-	private static final int FIFO_CONFIG_0 = 0x30;
-	private static final int PMU_SELF_TEST = 0x32;
-	private static final int TRIM_NVM_CTRL = 0x33;
-	private static final int BGW_SPI3_WDT = 0x34;
-	private static final int OFC_CTRL = 0x36;
-	private static final int OFC_SETTING = 0x37;
-	private static final int OFC_OFFSET_X = 0x38;
-	private static final int OFC_OFFSET_Y = 0x39;
-	private static final int OFC_OFFSET_Z = 0x3A;
-	private static final int TRIM_GP0 = 0x3B;
-	private static final int TRIM_GP1 = 0x3C;
-	private static final int FIFO_CONFIG_1 = 0x3E;
-	private static final int FIFO_DATA = 0x3F;
-
-	public static final int DEFAULT_ADDRESS = 0x18; // when ADO is LOW
-
-	/**
-	 * Accelerometer Scale
-	 */
-	public enum AccelerometerScale {
-		AFS_2G(0x02), AFS_4G(0x05), AFS_8G(0x08), AFS_16G(0x0C);
-
-		private AccelerometerScale(int value) {
-			this.value = (byte) value;
-		}
-
-		private final byte value;
-	}
-
 	private final byte accelerometerScale;
-
-	/**
-	 * Bandwidth
-	 */
-	public enum Bandwidth {
-		BW_7_81Hz(0x08), // 15.62 Hz sample rate, etc
-		BW_15_63Hz(0x09), //
-		BW_31_25Hz(0x0A), //
-		BW_62_5Hz(0x0B), //
-		BW_125Hz(0x0C), // 250 Hz sample rate
-		BW_250Hz(0x0D), //
-		BW_500Hz(0x0E), //
-		BW_1000Hz(0x0F); // 2 kHz sample rate == unfiltered data
-
-		private Bandwidth(int value) {
-			this.value = (byte) value;
-		}
-
-		private final byte value;
-	}
-
 	private final byte bandwidth;
-
-	/**
-	 * Power Mode
-	 */
-	public enum PowerMode {
-		normal_Mode(0x00b), //
-		deepSuspend_Mode(0x01), //
-		lowPower_Mode(0x02), //
-		suspend_Mode(0x04);
-
-		private PowerMode(int value) {
-			this.value = (byte) value;
-		}
-
-		private final byte value;
-	}
-
 	private final byte powerMode;
-
-	/**
-	 * Sleep Duration in Low-Power Mode
-	 */
-	public enum SleepDuration {
-		sleep0_5ms(0x05), sleep1ms(0x06), sleep2ms(0x07), sleep4ms(0x08), sleep6ms(0x09), sleep10ms(0x0A), sleep25ms(
-				0x0B), sleep50ms(0x0C), sleep100ms(0x0D), sleep500ms(0x0E), sleep1000ms(0x0F);
-
-		private SleepDuration(int value) {
-			this.value = (byte) value;
-		}
-
-		private final byte value;
-	}
-
 	private final byte sleepDuration;
+	private final float aRes; // Calculated sensor resolution
 
 	/**
 	 * Commands served by the Actor
@@ -159,19 +35,60 @@ public class BMA280 implements I2CProtocol<BMA280.Command, BMA280.Results> {
 	 * Results of a command execution
 	 */
 	public static class Results {
-		int x, y, z, temp;
+		/**
+		 * X-Axis Acceleration (in G)
+		 */
+		float x;
+
+		/**
+		 * Y-Axis Acceleration (in G)
+		 */
+		float y;
+
+		/**
+		 * Z-Axis Acceleration (in G)
+		 */
+		float z;
+
+		/**
+		 * Temperature in °C
+		 */
+		float temp;
+
+		@Override
+		public String toString() {
+			return String.format("BMA280.Results [x=% .04fg, y=% .04fg, z=% .04fg, temp=%.02f°C]", x, y, z, temp);
+		}
 	}
 
 	public BMA280() {
-		this(AccelerometerScale.AFS_16G, Bandwidth.BW_125Hz, PowerMode.normal_Mode, SleepDuration.sleep1ms);
+		this(BMA280Constants.AccelerometerScale.AFS_16G, BMA280Constants.Bandwidth.BW_125Hz,
+				BMA280Constants.PowerMode.normal_Mode, BMA280Constants.SleepDuration.sleep1ms);
 	}
 
-	public BMA280(AccelerometerScale accelerometerScale, Bandwidth bandwidth, PowerMode powerMode,
-			SleepDuration sleepDuration) {
+	public BMA280(BMA280Constants.AccelerometerScale accelerometerScale, BMA280Constants.Bandwidth bandwidth,
+			BMA280Constants.PowerMode powerMode, BMA280Constants.SleepDuration sleepDuration) {
 		this.accelerometerScale = accelerometerScale.value;
 		this.bandwidth = bandwidth.value;
 		this.powerMode = powerMode.value;
 		this.sleepDuration = sleepDuration.value;
+
+		switch (accelerometerScale) {
+		case AFS_2G:
+			aRes = 2.0f / 8192.0f;
+			break;
+		case AFS_4G:
+			aRes = 4.0f / 8192.0f;
+			break;
+		case AFS_8G:
+			aRes = 8.0f / 8192.0f;
+			break;
+		case AFS_16G:
+			aRes = 16.0f / 8192.0f;
+			break;
+		default:
+			throw new AssertionError("Unknown enum value for Accelerometer Scale.");
+		}
 	}
 
 	@Override
@@ -181,32 +98,75 @@ public class BMA280 implements I2CProtocol<BMA280.Command, BMA280.Results> {
 
 	@Override
 	public void init(I2CDevice dev) throws IOException {
-		dev.write(BGW_SOFTRESET, (byte) 0xB6);
-		
-		dev.write(PMU_RANGE, accelerometerScale);
-		dev.write(PMU_BW, bandwidth);
-		dev.write(PMU_LPW, (byte) (powerMode << 5 | sleepDuration << 1));
+		dev.write(BMA280Constants.BGW_SOFTRESET, (byte) 0xB6);
 
-		dev.write(INT_EN_1, (byte) 0x10); // set data ready interrupt (bit 4)
-		dev.write(INT_MAP_1, (byte) 0x01); // map data ready interrupt to INT1 (bit 0)
-		dev.write(INT_EN_0, (byte) (0x20 | 0x10)); // set single tap interrupt (bit 5) and double tap interrupt (bit 4)
-		dev.write(INT_MAP_2, (byte) (0x20 | 0x10)); // map single and double tap interrupts to INT2 (bits 4 and 5)
-		dev.write(INT_9, (byte) 0x0A); // set tap threshold to 10 x 3.125% of full range
-		dev.write(INT_OUT_CTRL, (byte) (0x04 | 0x01)); // interrupts push-pull, active HIGH (bits 0:3)
-		
-		log.info("BGA280 initialized. Chip ID {}.", dev.read(BGW_CHIPID));
+		sleep(100);
+
+		dev.write(BMA280Constants.PMU_RANGE, accelerometerScale);
+		dev.write(BMA280Constants.PMU_BW, bandwidth);
+		dev.write(BMA280Constants.PMU_LPW, (byte) (powerMode << 5 | sleepDuration << 1));
+
+		// set data ready interrupt (bit 4)
+		dev.write(BMA280Constants.INT_EN_1, (byte) 0x10);
+		// map data ready interrupt to INT1 (bit 0)
+		dev.write(BMA280Constants.INT_MAP_1, (byte) 0x01);
+		// interrupts push-pull, active HIGH (bits 0:3)
+		dev.write(BMA280Constants.INT_OUT_CTRL, (byte) (0x04 | 0x01));
+		// now INT1 can be wired to a GPIO In, which will trigger when data is ready
+
+		final int rawChipID = dev.read(BMA280Constants.BGW_CHIPID);
+		log.info("Initialized. Chip ID {}.", String.format("0x%02x", rawChipID));
 	}
 
 	@Override
-	public Results exec(I2CDevice dev, Command message) throws IOException {
-		System.out.println(message);
-		return new Results();
+	public Results exec(I2CDevice dev, Command command) throws IOException {
+		Results results = new Results();
+
+		switch (command) {
+		case SELFTEST:
+
+			break;
+		case CALIBRATE:
+			// set target data to 0g, 0g, and +1 g, cutoff at 1% of bandwidth
+			dev.write(BMA280Constants.OFC_SETTING, (byte) (0x20 | 0x01));
+			// x-axis calibration
+			dev.write(BMA280Constants.OFC_CTRL, (byte) (0x20 | 0x01));
+			while ((0x10 & dev.read(BMA280Constants.OFC_CTRL)) != 0) {
+			}
+			// y-axis calibration
+			dev.write(BMA280Constants.OFC_CTRL, (byte) (0x40 | 0x01));
+			while ((0x10 & dev.read(BMA280Constants.OFC_CTRL)) != 0) {
+			}
+			// z-axis calibration
+			dev.write(BMA280Constants.OFC_CTRL, (byte) (0x60 | 0x01));
+			while ((0x10 & dev.read(BMA280Constants.OFC_CTRL)) != 0) {
+			}
+		default:
+			byte[] data = new byte[9];
+			dev.read(0, data, 0, data.length);
+			final int rawX = (data[BMA280Constants.ACCD_X_MSB] << 8) + data[BMA280Constants.ACCD_X_LSB];
+			results.x = (float) rawX * aRes / 4.0f;
+			final int rawY = (data[BMA280Constants.ACCD_Y_MSB] << 8) + data[BMA280Constants.ACCD_Y_LSB];
+			results.y = (float) rawY * aRes / 4.0f;
+			final int rawZ = (data[BMA280Constants.ACCD_Z_MSB] << 8) + data[BMA280Constants.ACCD_Z_LSB];
+			results.z = (float) rawZ * aRes / 4.0f;
+			final byte rawTemp = data[BMA280Constants.ACCD_TEMP];
+			results.temp = 0.5f * ((float) rawTemp) + 23.0f;
+		}
+
+		return results;
 	}
 
 	@Override
 	public void shutdown(I2CDevice dev) throws IOException {
-		// TODO Auto-generated method stub
-
+		// Nothing to do here.
 	}
 
+	private void sleep(long delay) {
+		try {
+			Thread.sleep(delay);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
 }
