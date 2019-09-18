@@ -13,7 +13,6 @@ import akka.stream.javadsl.Source;
 import riot.GPIO;
 import riot.GPIO.State;
 import riot.I2C;
-import scala.compat.java8.FutureConverters;
 
 public class Application {
 
@@ -49,9 +48,6 @@ public class Application {
 
 		// Regularly query, then print out the values measured by the BMA280
 		timerSource.via(bma280).to(logSink).run(mat);
-
-		// Wait forever
-		FutureConverters.toJava(system.whenTerminated()).toCompletableFuture().join();
 	}
 
 }
