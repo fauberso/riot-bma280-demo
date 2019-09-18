@@ -13,10 +13,11 @@ import akka.stream.javadsl.Source;
 import riot.GPIO;
 import riot.GPIO.State;
 import riot.I2C;
+import scala.compat.java8.FutureConverters;
 
 public class Application {
 
-	public static void main(String[] args) throws InstantiationException, IllegalAccessException, InterruptedException {
+	public static void main(String[] args) {
 		ActorSystem system = ActorSystem.create("riot-bma280-demo");
 		Materializer mat = ActorMaterializer.create(system);
 
@@ -50,7 +51,7 @@ public class Application {
 		timerSource.via(bma280).to(logSink).run(mat);
 
 		// Wait forever
-		Thread.currentThread().join();
+		FutureConverters.toJava(system.whenTerminated()).toCompletableFuture().join();
 	}
 
 }
