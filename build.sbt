@@ -14,5 +14,6 @@ libraryDependencies ++= Seq(
 )
 
 lazy val root = (project in file(".")).enablePlugins(JavaServerAppPackaging).settings(
-  riotPrereqs := "oracle-java8-jdk wiringpi i2c-tools"
+  riotPrereqs := "oracle-java8-jdk wiringpi i2c-tools",
+  riotRequiresI2C := true
 )
