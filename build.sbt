@@ -16,6 +16,7 @@ libraryDependencies ++= Seq(
 )
 
 lazy val root = (project in file(".")).enablePlugins(JavaServerAppPackaging).settings(
+  publishArtifact in (Compile, packageDoc) := false,
   riotTargets := Seq(
     riotTarget("raspberrypi", "pi", "raspberry")
   ),
