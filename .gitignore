@@ -30,3 +30,6 @@ hs_err_pid*
 **/target/
 .cache-main
 /bin/
+
+# MacOS
+Icon?
